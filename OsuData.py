@@ -88,6 +88,11 @@ class OsuData:
         query = "INSERT INTO users (id, username, country, rank, country_rank, accuracy, playcount, playtime,pp, playstyle, isactive) \
             VALUES (@id, @username, @country, @rank, @country_rank, @accuracy, @playcount, @playtime, @pp, @playstyle, @isactive);"
         try:
+            b = user[10]
+            if b=="False":
+                b=False
+            else:
+                b=True
             self.executeQuery(query,{
                     "id":int(user[0]),
                     "username":user[1],
@@ -99,7 +104,7 @@ class OsuData:
                     "playtime":int(user[7]),
                     "pp":float(user[8]),
                     "playstyle":int(user[9]),
-                    "isactive":bool(user[10])}
+                    "isactive":b}
                     )
         except Exception as error:
             print(error)
@@ -122,6 +127,7 @@ class OsuData:
         self.executeQuery(create_table_query)
 
     def Start(self):
+        #self.ReCreateTable()
         random.seed(datetime.now().timestamp()+1)
         GeneralSovSize=40000000
         mask = [0]*GeneralSovSize

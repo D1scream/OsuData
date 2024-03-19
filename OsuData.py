@@ -3,6 +3,8 @@ import datetime
 import sys
 import random
 import sqlite3
+
+
 client_id = 30992
 client_secret = "Qy1ezYjsN0VdPHla2uPuCwwEQ79E58m5RNplrSqj"
 api = Ossapi(client_id, client_secret)

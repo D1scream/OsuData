@@ -1,149 +1,71 @@
+from decimal import Decimal
 from ossapi import *
 import random
 import sqlite3
 from datetime import datetime
+from DbController import DbController
+from OsuUser import OsuUser
+
 class OsuData:
-    def __init__(self, client_id,client_secret):
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.api = Ossapi(client_id, client_secret)
+    api = Ossapi(OsuUser.client_id, OsuUser.client_secret)
+    def __init__(self):        
+        self.db=DbController('OsuData.db')
 
-    def executeQuery(self, query,vars=None):
-        connection = sqlite3.connect('OsuData.db')
-        cursor = connection.cursor()
-        try:
-            if(vars is None):
-                cursor.execute(query)
-            else:
-                cursor.execute(query,vars)
-            list = []
-            for i in cursor.fetchall():
-                list.append(i)
-            connection.commit()
-            return list
-        except Exception as error:
-            #print("Ошибка при работе с СУБД ", error,vars)
-            pass
-        
-        finally:
-            if connection:
-                cursor.close()
-                connection.close()
-
-    def GetUserInfo(self,id):
-            try:
-                user = self.executeQuery("SELECT * FROM users WHERE id = @id",{"id" : id})
-                #If user Not Empty
-                try:
-                    
-                    l=user[0][3]
-                    return user[0]
-                except:
-                    try:
-                        user = self.api.user(id, key=UserLookupKey.ID)
-                    except:
-                        return None
-                
-                if(user.is_bot==True):
-                    #print("Bot")
-                    return None
-                
-                if(user.statistics.play_time<6000 and False):
-                    #print("low time")
-                    return None
-                
-                if(not user.is_active and False):
-                    #print("not active")
-                    return None
-                if(user.statistics.global_rank>1000000):
-                    #print("low rank ",user.statistics.rank)
-                    return None
-                info=[str(user.id),user.username,
-                    str(user.country.name),
-                    str(user.statistics.global_rank),
-                    str(user.statistics.country_rank),
-                    str(user.statistics.hit_accuracy),
-                    str(user.statistics.play_count),
-                    str(user.statistics.play_time),
-                    str(user.statistics.pp),
-                    str(user.playstyle),
-                    str(user.is_active)]
-                print("Added")
-                print(info)
-                return info
-            except Exception as error:
-                #print(str(id)+" "+str(error))
-                return None
-
-    def WriteUserToDB(self,user):
-        try:
-            l = int(user[9])
-        except:
-            user[9]=0
-        try:
-            l = int(user[3])
-        except:
-            print(user[1]," No pp")
-            return
-        query = "INSERT INTO users (id, username, country, rank, country_rank, accuracy, playcount, playtime,pp, playstyle, isactive) \
-            VALUES (@id, @username, @country, @rank, @country_rank, @accuracy, @playcount, @playtime, @pp, @playstyle, @isactive);"
-        try:
-            b = user[10]
-            if b=="False":
-                b=False
-            else:
-                b=True
-            self.executeQuery(query,{
-                    "id":int(user[0]),
-                    "username":user[1],
-                    "country":user[2],
-                    "rank":int(user[3]),
-                    "country_rank":int(user[4]),
-                    "accuracy":float(user[5]),
-                    "playcount":int(user[6]),
-                    "playtime":int(user[7]),
-                    "pp":float(user[8]),
-                    "playstyle":int(user[9]),
-                    "isactive":b}
-                    )
-        except Exception as error:
-            print(error)
+    def GetCountDB(self):
+        return self.db.ExecuteQuery("SELECT COUNT(*) FROM users")[0][0]
 
     def ReCreateTable(self):
-        drop_table = "DROP TABLE users"
-        self.executeQuery(drop_table)
-        create_table_query = '''  CREATE TABLE users
-                                (id INTEGER PRIMARY KEY NOT NULL,
-                                username TEXT NOT NULL,
-                                country TEXT,
-                                rank INTEGER,
-                                country_rank INTEGER,
-                                accuracy REAL,
-                                playcount INTEGER,
-                                playtime INTEGER,
-                                pp REAL,
-                                playstyle INTEGER,
-                                isactive BOOLEAN); '''
-        self.executeQuery(create_table_query)
+        self.db.ExecuteQuery("DROP TABLE users")
+        self.db.ExecuteQuery(OsuUser.SQLCREATETABLE)
+    
+    def CheckUser(self,user:OsuUser)->bool:
+        if(user.global_rank and user.global_rank>1000000):
+            return False
+        if(user.is_active==False):
+            return False
+        if(user.play_time<6000):
+            return False
+        return True
+
+    def GetListUsers(self,userIds:list[int])->list[OsuUser]:
+        users:list[OsuUser]=[]
+        for userCompact in self.api.users(userIds):
+            try:
+                user = OsuUser(userCompact.id)#LazyLoad OsuUser
+                #print(user.Info(), "Huinfo")
+                
+                users.append(user) 
+            except Exception as e:
+                print(e)
+        return users
+            
 
     def Start(self):
         #self.ReCreateTable()
-        random.seed(datetime.now().timestamp()+1)
-        GeneralSovSize=40000000
-        mask = [0]*GeneralSovSize
-        j=10
-        print("start")
-        while(j!=0):
-                ran = random.randint(0,GeneralSovSize-1)
-                mask[ran]
-                user = self.GetUserInfo(ran)
-                if(not user is None):
-                    #print(user)
-                    self.WriteUserToDB(user) #Добавить user с рандомным id в базу
-                mask[ran] = 1
-        print("end")
 
-client_id = 30992
-client_secret = "Qy1ezYjsN0VdPHla2uPuCwwEQ79E58m5RNplrSqj"
-osudata = OsuData(client_id,client_secret)
+        #print("\n")
+        random.seed(datetime.now().timestamp())
+        maxId=40000000
+        mask:list[int]=[0]*maxId
+
+        while(True):
+                ran = random.randint(0,maxId-1)
+                if(mask[ran]==0):
+                    mask[ran] = -1
+                    try:
+                        user = OsuUser(ran)
+                        
+                        if(self.CheckUser(user)):
+                            user.Save()
+                            print(user.Info())
+                            mask[ran] = 1
+                        else:
+                            # print("ifs")
+                            pass
+
+                    except Exception as e:
+                        #print("MainErr ",e)
+                        pass
+            
+osudata = OsuData()
 osudata.Start()
